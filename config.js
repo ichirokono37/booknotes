@@ -2,7 +2,7 @@
 // Azure（Microsoft Entra）でアプリ登録したあと、clientId に「アプリケーション（クライアント）ID」を貼り付けてください。
 // 空のままでも、端末内だけで保存するモードで動きます。
 window.BOOKNOTES_CONFIG = {
-  clientId: "",
+  clientId: "feace3da-d345-4b4b-a687-ce5d4081c10c",
 
   // 個人用 Microsoft アカウント向け（変更不要）
   authority: "https://login.microsoftonline.com/consumers",
