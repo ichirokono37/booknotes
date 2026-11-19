@@ -188,6 +188,13 @@ textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 
 .choice input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .choice input:focus-visible + span { outline: 2px solid var(--accent); }
 
+.date-row { display: flex; gap: 8px; align-items: center; }
+.date-row input { flex: 1; min-width: 0; min-height: 44px; -webkit-appearance: none; appearance: none; }
+.date-row .btn { flex: none; padding: 10px 12px; }
+.finished-on { margin: 0 0 6px; }
+.note .when { font-variant-numeric: tabular-nums; }
+.pick-date { display: block; font-size: .72rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
 .danger-zone { margin-top: 40px; text-align: center; }
 
 .overlay {

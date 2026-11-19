@@ -16,6 +16,9 @@ const md = s => {
   if (s.length === 10) { const [, m, d] = s.split('-'); return `${+m}/${+d}`; }
   const d = new Date(s); return `${d.getMonth() + 1}/${d.getDate()}`;
 };
+const fullDate = s => { const [y, m, d] = s.split('-'); return `${y}/${+m}/${+d}`; };
+// メモの記録日時：2026/11/18 22:14
+const stamp = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const INTERVALS = [1, 7, 30];
 const MAX = 140;
 
@@ -89,12 +92,15 @@ function field(id, label, { max = MAX, value = '', ph = '', rows = 2 } = {}) {
 function bookRow(b) {
   const n = liveNotes(b).length; const next = nextReview(b);
   let sub = `${b.author ? esc(b.author) + ' · ' : ''}メモ ${n}件`;
-  if (b.status === 'finished') sub += next ? ` · 次の振り返り ${md(next.due)}` : ' · 振り返り完了';
+  if (b.status === 'finished') {
+    if (b.finishedDate) sub += ` · 読了 ${fullDate(b.finishedDate)}`;
+    sub += next ? ` · 次の振り返り ${md(next.due)}` : ' · 振り返り完了';
+  }
   return `<a class="card row" href="#/book/${b.id}"><div><div class="title">${esc(b.title)}</div><div class="sub">${sub}</div></div><span class="chev">›</span></a>`;
 }
 function noteItem(n) {
   const label = { recall: '思い出し', reflect: '振り返り' }[n.type];
-  const meta = [label ? `<span class="tag">${label}</span>` : '', n.page ? `p.${esc(n.page)}` : '', n.chapter ? esc(n.chapter) : '', md(n.createdAt)].filter(Boolean).join(' · ');
+  const meta = [`<time class="when" datetime="${esc(n.createdAt)}">${stamp(n.createdAt)}</time>`, label ? `<span class="tag">${label}</span>` : '', n.page ? `p.${esc(n.page)}` : '', n.chapter ? esc(n.chapter) : ''].filter(Boolean).join(' · ');
   return `<li class="note ${n.type}"><p>${esc(n.text)}</p><div class="meta">${meta}<button class="link" data-act="delnote" data-id="${n.id}">削除</button></div></li>`;
 }
 const ACTION_LABEL = { tried: '試した', notyet: 'まだ', skip: 'やめておく' };
@@ -103,7 +109,7 @@ function summaryCard(b) {
   const top = (s.top || []).map(id => noteById(b, id)).filter(Boolean);
   const lastAct = (b.actionLog || []).slice(-1)[0];
   const revs = (b.reviews || []).map(r => `<li class="${r.doneAt ? 'done' : ''}"><span>${r.interval}日後</span><span>${r.doneAt ? '✓ ' + md(r.doneAt) : md(r.due)}</span></li>`).join('');
-  return `<div class="card summary"><div class="kicker">この本のベスト${top.length || ''}</div>
+  return `<div class="card summary">${b.finishedDate ? `<p class="status-line finished-on">読了日：${fullDate(b.finishedDate)}</p>` : ''}<div class="kicker">この本のベスト${top.length || ''}</div>
     ${top.length ? `<ol class="best">${top.map(n => `<li>${esc(n.text)}</li>`).join('')}</ol>` : '<p class="muted">（まだ選ばれていません）</p>'}
     ${s.why ? `<div class="kv"><span>なぜ刺さった</span><p>${esc(s.why)}</p></div>` : ''}
     ${s.action ? `<div class="kv action"><span>試すこと</span><p>${esc(s.action)}</p></div>` : ''}
@@ -117,7 +123,8 @@ const notFound = () => `<a class="back" href="#/">‹ ホーム</a><p class="emp
 function viewHome() {
   const books = Store.books();
   const reading = books.filter(b => b.status !== 'finished').sort((x, y) => (y.updatedAt || '').localeCompare(x.updatedAt || ''));
-  const finished = books.filter(b => b.status === 'finished').sort((x, y) => (y.finishedAt || '').localeCompare(x.finishedAt || ''));
+  const finKey = b => b.finishedDate || (b.finishedAt || '').slice(0, 10);
+  const finished = books.filter(b => b.status === 'finished').sort((x, y) => finKey(y).localeCompare(finKey(x)) || (y.finishedAt || '').localeCompare(x.finishedAt || ''));
   const due = dueReviews();
   let h = '';
   if (due.length) {
@@ -166,7 +173,7 @@ let finishDraft = null; // 読了画面の入力途中の内容
 function viewFinish(b) {
   const s = b.summary || {};
   if (!finishDraft || finishDraft.bookId !== b.id) {
-    finishDraft = { bookId: b.id, ids: new Set((s.top || []).filter(id => noteById(b, id))), why: s.why || '', action: s.action || '' };
+    finishDraft = { bookId: b.id, ids: new Set((s.top || []).filter(id => noteById(b, id))), why: s.why || '', action: s.action || '', date: b.finishedDate || '' };
   }
   const notes = liveNotes(b);
   const editing = b.status === 'finished';
@@ -176,7 +183,7 @@ function viewFinish(b) {
   <section><h2 class="sec">1. ベスト3を選ぶ <span class="pill" id="selCount">${finishDraft.ids.size}/3</span></h2>
     ${notes.length ? `<ul class="pick">${notes.map(n => {
       const on = finishDraft.ids.has(n.id);
-      return `<li><button type="button" class="pickbtn${on ? ' on' : ''}" data-act="pick" data-id="${n.id}" aria-pressed="${on}"><span class="check"></span><span>${esc(n.text)}</span></button></li>`;
+      return `<li><button type="button" class="pickbtn${on ? ' on' : ''}" data-act="pick" data-id="${n.id}" aria-pressed="${on}"><span class="check"></span><span>${esc(n.text)}<small class="pick-date">${stamp(n.createdAt)}</small></span></button></li>`;
     }).join('')}</ul>` : '<p class="empty">メモがありません。思い出せることを1つ書いてみましょう。</p>'}
     <form data-form="quicknote" class="inline-form"><input id="quickNote" maxlength="${MAX}" placeholder="メモにない学びを追加" autocomplete="off"><button class="btn">追加</button></form>
   </section>
@@ -186,6 +193,14 @@ function viewFinish(b) {
       ${field('why', 'なぜ刺さった？', { value: finishDraft.why, ph: '自分の仕事や状況とのつながり' })}
       ${field('action', '明日から試すこと1つ', { value: finishDraft.action, ph: '例：会議の最初に目的を1文で言う' })}
     </div></section>
+    <section><h2 class="sec">3. 読了日（任意・あとからでもOK）</h2>
+      <div class="date-row">
+        <input type="date" id="finishDate" value="${esc(finishDraft.date)}" max="${today()}" aria-label="読了日">
+        <button type="button" class="btn" data-act="datetoday">今日</button>
+        <button type="button" class="btn ghost" data-act="dateclear">クリア</button>
+      </div>
+      <p class="hint">空欄のままでも保存できます。</p>
+    </section>
     <button class="btn primary big">${editing ? 'まとめを更新' : '読了として保存'}</button>
     ${editing ? '' : '<p class="hint">保存すると、1日後・7日後・30日後に振り返りがホームに表示されます。</p>'}
   </form>`;
@@ -307,6 +322,8 @@ const actions = {
     el.classList.toggle('on', set.has(id)); el.setAttribute('aria-pressed', set.has(id));
     $('#selCount').textContent = `${set.size}/3`;
   },
+  datetoday() { const el = $('#finishDate'); el.value = today(); finishDraft.date = el.value; },
+  dateclear() { const el = $('#finishDate'); el.value = ''; finishDraft.date = ''; },
   cantrecall() { reviewDraft.recall = ''; reviewDraft.stage = 2; render(); window.scrollTo(0, 0); },
   signin() { window.Sync.signIn(); },
   reauth() { window.Sync.signIn(); },
@@ -355,6 +372,8 @@ const forms = {
   finish() {
     const b = currentBook(); if (!b) return;
     b.summary = { top: [...finishDraft.ids].slice(0, 3), why: val('why'), action: val('action') };
+    const date = val('finishDate');
+    b.finishedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
     const first = b.status !== 'finished';
     if (first) {
       b.status = 'finished'; b.finishedAt = nowISO();
@@ -383,6 +402,9 @@ const forms = {
 };
 
 document.addEventListener('click', e => {
+  // 今いる画面へのリンク（設定画面で⚙を押したときなど）は、画面を描き直して反応を返す
+  const link = e.target.closest('a[href^="#/"]');
+  if (link && link.getAttribute('href') === location.hash) { e.preventDefault(); actions.closemodal(); render(); window.scrollTo(0, 0); return; }
   const el = e.target.closest('[data-act]'); if (!el) return;
   if (el.classList.contains('overlay') && e.target !== el) return; // シートの内側のクリックでは閉じない
   const fn = actions[el.dataset.act]; if (fn) { e.preventDefault(); fn(el); }
@@ -397,6 +419,7 @@ document.addEventListener('input', e => {
   const c = document.querySelector(`.count[data-for="${t.id}"]`);
   if (c) c.textContent = `${t.value.length}/${c.dataset.max}`;
   if (finishDraft && (t.id === 'why' || t.id === 'action')) finishDraft[t.id] = t.value;
+  if (finishDraft && t.id === 'finishDate') finishDraft.date = t.value;
   if (reviewDraft && t.id === 'recallText') reviewDraft.recall = t.value;
 });
 document.addEventListener('focusout', () => { if (pendingRender) setTimeout(() => { if (!isEditing()) render(); }, 0); });
